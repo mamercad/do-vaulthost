@@ -24,6 +24,20 @@ all:
       ssh_keys:
         - "{{ lookup('env', 'DO_SSH_KEY_ID') }}"
       oauth_token: "{{ lookup('env', 'DO_API_TOKEN') }}"
+    write_vault_secrets: yes # DANGER: This will write Vault's unseal keys and initial root token to /root/vault
+```
+
+Please read the `DANGER` message, and please read [this](https://learn.hashicorp.com/tutorials/vault/getting-started-deploy). After reading, you should be able to unseal your Vault, and then do something along these lines:
+
+```bash
+root@vaulthost:~# vault kv put kv/hello foo=bar
+Success! Data written to: kv/hello
+
+root@vaulthost:~# vault kv get kv/hello
+=== Data ===
+Key    Value
+---    -----
+foo    bar
 ```
 
 To kick it off, make sure that the following environment variables are set:
