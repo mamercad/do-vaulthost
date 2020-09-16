@@ -42,11 +42,47 @@
         name: vault
         update_cache: yes
 
-    # - name: Start and enable HashiCorp Vault
-    #   service:
-    #     name: vault
-    #     state: started
-    #     enabled: yes
+    - name: Generate an OpenSSL private key with the default values (4096 bits, RSA)
+      openssl_privatekey:
+        path: /opt/vault/tls/vault.key
+
+    - name: Generate an OpenSSL Certificate Signing Request for Vault
+      openssl_csr:
+        path: /opt/vault/tls/vault.csr
+        privatekey_path: /opt/vault/tls/vault.key
+        common_name: "{{ vaulthost_droplet.data.ip_address }}.xip.io"
+
+    - name: Generate self-signed OpenSSL certificates for Vault
+      openssl_certificate:
+        path: /opt/vault/tls/vault.crt
+        privatekey_path: /opt/vault/tls/vault.key
+        csr_path: /opt/vault/tls/vault.csr
+        provider: selfsigned
+
+    - name: Lay down the Vault configuration file
+      copy:
+        dest: /etc/vault.d/vault.hcl
+        backup: yes
+        owner: vault
+        group: vault
+        mode: '0644'
+        content: |
+          ui = true
+          storage "file" {
+            path = "/opt/vault/data"
+          }
+          listener "tcp" {
+            address       = "0.0.0.0:8200"
+            tls_cert_file = "/opt/vault/tls/vault.crt"
+            tls_key_file  = "/opt/vault/tls/vault.key"
+          }
+
+    - name: Start and enable HashiCorp Vault
+      systemd:
+        name: vault
+        state: started
+        enabled: yes
+        daemon_reload: yes
 
   delegate_to: root@{{ vaulthost_droplet.data.ip_address }}
   connection: ssh
