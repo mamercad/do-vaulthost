@@ -110,7 +110,6 @@
         mode: '0400'
         content: "{{ vault_operator_init.stdout }}\n"
       when:
-        - vault_operator_init is defined
         - vault_operator_init.changed
         - write_vault_secrets | bool
 
