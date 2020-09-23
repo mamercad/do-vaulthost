@@ -104,15 +104,86 @@
 
     - name: Write the Vault secrets locally (caveat emptor)
       copy:
-        dest: /root/vault
+        dest: /root/vault.unseal
         owner: root
         group: root
-        mode: '0400'
+        mode: 0400
         content: "{{ vault_operator_init.stdout }}\n"
       when:
-        - vault_operator_init is defined
         - vault_operator_init.changed
-        - write_vault_secrets | bool
+        - write_vault_secrets | default(False) | bool
+
+    - name: Create a fact for the Vault unseal key 1
+      set_fact:
+        vault_unseal_key_1: "{{ vault_operator_init.stdout_lines[0].split(': ')[1] }}"
+      when: vault_operator_init.changed
+
+    - name: Create a fact for the Vault unseal key 2
+      set_fact:
+        vault_unseal_key_2: "{{ vault_operator_init.stdout_lines[1].split(': ')[1] }}"
+      when: vault_operator_init.changed
+
+    - name: Create a fact for the Vault unseal key 3
+      set_fact:
+        vault_unseal_key_3: "{{ vault_operator_init.stdout_lines[2].split(': ')[1] }}"
+      when: vault_operator_init.changed
+
+    - name: Create a fact for the Vault initial root token
+      set_fact:
+        vault_root_token: "{{ vault_operator_init.stdout_lines[6].split(': ')[1] }}"
+      when: vault_operator_init.changed
+
+    - name: Unseal the Vault (apply unseal key 1)
+      shell: |
+        vault operator unseal {{ vault_unseal_key_1 }}
+      environment:
+        VAULT_CACERT: /opt/vault/tls/vault.crt
+        VAULT_ADDR: https://{{ vaulthost_droplet.data.ip_address }}.xip.io:8200
+      when: vault_operator_init.changed
+
+    - name: Unseal the Vault (apply unseal key 2)
+      shell: |
+        vault operator unseal {{ vault_unseal_key_2 }}
+      environment:
+        VAULT_CACERT: /opt/vault/tls/vault.crt
+        VAULT_ADDR: https://{{ vaulthost_droplet.data.ip_address }}.xip.io:8200
+      when: vault_operator_init.changed
+
+    - name: Unseal the Vault (apply unseal key 3)
+      shell: |
+        vault operator unseal {{ vault_unseal_key_3 }}
+      environment:
+        VAULT_CACERT: /opt/vault/tls/vault.crt
+        VAULT_ADDR: https://{{ vaulthost_droplet.data.ip_address }}.xip.io:8200
+      when: vault_operator_init.changed
+
+    - name: Show the Vault status (should be unsealed now)
+      shell: |
+        vault status
+      environment:
+        VAULT_CACERT: /opt/vault/tls/vault.crt
+        VAULT_ADDR: https://{{ vaulthost_droplet.data.ip_address }}.xip.io:8200
+        VAULT_TOKEN: "{{ vault_root_token }}"
+      when: vault_operator_init.changed
+
+    - name: Lay down Vault /root/vault.env (convenience)
+      copy:
+        dest: /root/vault.env
+        owner: root
+        group: root
+        mode: 0400
+        content: |
+          export VAULT_ADDR='https://{{ vaulthost_droplet.data.ip_address }}.xip.io:8200'
+          export VAULT_CACERT='/opt/vault/tls/vault.crt'
+          export VAULT_TOKEN='{{ vault_root_token }}'
+
+    - name: Create versioned secrets (kv-v2) at secret/
+      shell: |
+        vault secrets enable -path=secret kv-v2
+      environment:
+        VAULT_ADDR: https://{{ vaulthost_droplet.data.ip_address }}.xip.io:8200
+        VAULT_CACERT: /opt/vault/tls/vault.crt
+        VAULT_TOKEN: "{{ vault_root_token }}"
 
   delegate_to: root@{{ vaulthost_droplet.data.ip_address }}
   connection: ssh
